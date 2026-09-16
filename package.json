@@ -1,0 +1,57 @@
+{
+  "name": "rainclassroom-ai-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RainClassroom AI desktop assistant",
+  "author": "jiazhengfu912-lang",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "test:e2e": "npm run build && node tests/desktop.mjs",
+    "package": "npm run build && electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "lossless-json": "^4.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.18.1",
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.1",
+    "playwright": "1.63.0",
+    "typescript": "^5.9.3",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  },
+  "build": {
+    "appId": "local.rainclassroom.ai.desktop",
+    "productName": "RainClassroom AI",
+    "directories": {
+      "output": "deliverables"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "artifactName": "RainClassroom-AI-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
