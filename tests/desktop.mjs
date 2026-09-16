@@ -40,14 +40,13 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname.startsWith('/lesson/fullscreen/v3/'))return html(`<!doctype html><meta charset="utf-8"><style>body{margin:0;font-family:sans-serif;background:#ddd}</style><main id="question">${questionHtml()}</main><script>fetch('/api/v3/lesson/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:'${lesson}',source:5})});setInterval(()=>fetch('/current').then(r=>r.text()).then(t=>{if(document.getElementById('question').innerHTML!==t)document.getElementById('question').innerHTML=t}),150);</script>`);
   if(url.pathname==='/current')return html(questionHtml());
   if(url.pathname==='/api/v3/lesson/checkin'){res.setHeader('Set-Auth','fixture-bearer');return json({code:0,data:{lessonId:lesson,role:3,lessonToken:'fixture-lesson-token',isGuest:false}});}
-  if(url.pathname==='/api/v3/lesson/presentation/fetch')return json({code:0,data:{slides:problems.map(p=>({cover:`${origin}/${brokenImage?'broken-image':'image'}`,problem:{...p,result:submissions.some(s=>s.problemId===p.problemId)?p.expected:null}}))}});
-  if(url.pathname==='/image'){res.writeHead(200,{'Content-Type':'image/png'});return res.end(image());}
-  if(url.pathname==='/broken-image')return json({error:'image expired'},404);
+  if(url.pathname==='/api/v3/lesson/presentation/fetch')return json({code:0,data:{slides:problems.map(p=>({cover:`${origin}/image`,problem:{...p,result:submissions.some(s=>s.problemId===p.problemId)?p.expected:null}}))}});
+  if(url.pathname==='/image'){if(brokenImage)return json({error:'image expired'},404);res.writeHead(200,{'Content-Type':'image/png'});return res.end(image());}
   if(url.pathname==='/api/v3/lesson/problem/answer'){let body='';for await(const c of req)body+=c;submissions.push(JSON.parse(body));if(unknown)return req.socket.destroy();return json({code:0});}
   return json({error:'not found'},404);
 });
 const wss=new WebSocketServer({server,path:'/wsapp/'});
-wss.on('connection',ws=>{sockets.add(ws);ws.on('close',()=>sockets.delete(ws));ws.on('message',bytes=>{const d=JSON.parse(bytes.toString());if(d.op==='hello')ws.send(JSON.stringify({op:'hello',presentation:'555',timeline:[],unlockedproblem:[problems[current].problemId]}));if(d.op==='probleminfo')ws.send(JSON.stringify({op:'probleminfo',problemid:d.problemid,limit:closed?0:120,now:Date.now(),dt:Date.now(),closed}));});});
+wss.on('connection',ws=>{sockets.add(ws);ws.on('close',()=>sockets.delete(ws));ws.on('message',bytes=>{const d=JSON.parse(bytes.toString());if(d.op==='hello')ws.send(JSON.stringify({op:'hello',presentation:'555',timeline:[],unlockedproblem:[problems[current].problemId]}));if(d.op==='fetchtimeline')ws.send(JSON.stringify({op:'fetchtimeline',timeline:[{type:'problem',prob:problems[current].problemId,pres:'555',sid:problems[current].problemId,limit:120}]}));if(d.op==='probleminfo')ws.send(JSON.stringify({op:'probleminfo',problemid:d.problemid,limit:closed?0:120,now:Date.now(),dt:Date.now(),closed}));});});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
 let application;
 const env={...process.env,RAIN_E2E:'1',RAIN_TEST_DATA:dataPath,RAIN_TEST_ORIGIN:origin};delete env.ELECTRON_RUN_AS_NODE;

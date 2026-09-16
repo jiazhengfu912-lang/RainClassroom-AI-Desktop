@@ -15,6 +15,7 @@ export class Yuketang {
   private heartbeat?: ReturnType<typeof setInterval>;
   private generation = 0;
   private questions = new Map<string, QuestionContext>();
+  private loadedPresentations = new Set<string>();
   private closed = new Set<string>();
   private discovering = new Set<string>();
   private awaitingPresentation = new Set<string>();
@@ -31,7 +32,7 @@ export class Yuketang {
     const csrf = cookies.find(c => c.name === 'csrftoken');
     if (csrf) headers['X-CSRFToken'] = csrf.value;
     const r = await this.session.fetch(`${this.origin}${path}`, { method: body === undefined ? 'GET' : 'POST', headers, credentials: 'include', redirect: 'error', signal: AbortSignal.timeout(12000), ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-    if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? '雨课堂登录已失效，请重新登录' : `雨课堂 HTTP ${r.status}`);
+    if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? '雨课堂登录已失效，请重新登录' : r.status === 429 ? '雨课堂请求过于频繁，请稍后重新开始（HTTP 429）' : `雨课堂 HTTP ${r.status}`);
     const raw = await r.text();
     if (raw.length > 16000000) throw new Error('平台响应过大');
     return decode(raw);
@@ -86,14 +87,16 @@ export class Yuketang {
       if (p) { clearTimeout(p.timer); this.pending.delete(key); p.resolve(d); }
       return;
     }
-    if (op === 'hello') {
-      this.closed.clear();
+    if (op === 'hello' || op === 'fetchtimeline') {
+      if (op === 'hello') this.closed.clear();
       this.onConnection('课堂已连接');
-      const pres = [...new Set<string>([...((d.timeline ?? []).filter((s: any) => s.type === 'slide').map((s: any) => id(s.pres))), ...(d.presentation ? [id(d.presentation)] : [])])];
+      const timeline = Array.isArray(d.timeline) ? d.timeline : [];
+      const pres = [...new Set<string>([...(timeline.filter((s: any) => (s.type === 'slide' || s.type === 'problem') && s.pres).map((s: any) => id(s.pres))), ...(d.presentation ? [id(d.presentation)] : [])])];
       const generation = this.generation;
       void (async () => {
-        for (const p of pres) await this.loadPresentation(p);
+        for (const p of pres) if (!this.loadedPresentations.has(p)) await this.loadPresentation(p);
         if (generation !== this.generation) return;
+        for (const item of timeline) if (item.type === 'problem') this.awaitingPresentation.add(id(item.prob));
         for (const q of d.unlockedproblem ?? []) this.awaitingPresentation.add(id(typeof q === 'object' ? q.sid ?? q.problemId : q));
         for (const qid of [...this.awaitingPresentation]) await this.discover(qid);
       })().catch(() => this.onConnection('题目同步失败，请暂停后重新进入课堂'));
@@ -115,6 +118,7 @@ export class Yuketang {
     const r = await this.request(`/api/v3/lesson/presentation/fetch?presentation_id=${encodeURIComponent(presentationId)}`);
     if (generation !== this.generation) return;
     if (String(r.code) !== '0' || !Array.isArray(r.data?.slides)) throw new Error('课件结构不支持');
+    this.loadedPresentations.add(presentationId);
     for (const slide of r.data.slides) {
       if (!slide.problem) continue;
       try {
@@ -139,10 +143,23 @@ export class Yuketang {
     const q = this.questions.get(questionId);
     if (!q) { this.onConnection('本题尚无完整题目结构，自动答题已跳过'); return; }
     this.discovering.add(questionId);
-    try { const fresh = await this.fresh(q); this.awaitingPresentation.delete(questionId); this.onQuestion(fresh); }
+    try {
+      const generation = this.generation;
+      const info = await this.info(questionId);
+      if (generation !== this.generation) return;
+      const deadline = deadlineFromInfo(info);
+      const open = !this.closed.has(questionId) && info.locked !== true && info.closed !== true && (deadline === null || deadline > Date.now());
+      const current = { ...q, deadline, open };
+      this.questions.set(questionId, current);
+      this.awaitingPresentation.delete(questionId); this.onQuestion(current);
+    }
     finally { this.discovering.delete(questionId); }
   }
-  async resync() { for (const q of [...this.questions.values()]) if (q.open) await this.discover(q.questionId); }
+  async resync() {
+    if (this.ws?.readyState !== WebSocket.OPEN) throw new Error('课堂尚未连接，请等待连接成功后再开始');
+    // 当前官方 hello 不一定包含 unlockedproblem；重启监听时重新请求已发布题目时间线。
+    this.ws.send(JSON.stringify({op:'fetchtimeline',lessonid:this.lesson!.id,msgid:Date.now()}));
+  }
   async fresh(q: QuestionContext) {
     const generation = this.generation;
     const user = await this.request('/api/v3/user/basic-info');
@@ -168,5 +185,5 @@ export class Yuketang {
     return receipt(decode(await submitOnce(`${this.origin}/api/v3/lesson/problem/answer`, headers, { problemId: q.questionId, problemType: q.platformType, dt: Math.floor(Date.now() / 1000), result: a.answers })));
   }
   private clearPending() { for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('课堂已断开')); } this.pending.clear(); }
-  disconnect() { this.alive = false; this.generation++; if (this.timer) clearTimeout(this.timer); if (this.heartbeat) clearInterval(this.heartbeat); const old = this.ws; this.ws = undefined; old?.close(); this.clearPending(); this.questions.clear(); this.closed.clear(); this.awaitingPresentation.clear(); this.auth = ''; this.lessonToken = ''; this.lesson = null; }
+  disconnect() { this.alive = false; this.generation++; if (this.timer) clearTimeout(this.timer); if (this.heartbeat) clearInterval(this.heartbeat); const old = this.ws; this.ws = undefined; old?.close(); this.clearPending(); this.questions.clear(); this.loadedPresentations.clear(); this.closed.clear(); this.awaitingPresentation.clear(); this.auth = ''; this.lessonToken = ''; this.lesson = null; }
 }

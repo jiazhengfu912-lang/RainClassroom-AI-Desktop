@@ -4,9 +4,9 @@
 
 An experimental Windows 11 x64 app for standard RainClassroom (`www.yuketang.cn`). Sign in through the official website, select one live classroom, capture question images, and use your own vision-model API to preview or automatically submit single-choice, multiple-choice and fill-in-the-blank answers.
 
-**Version 0.1.0 has not yet completed live RainClassroom acceptance. Local fixture tests do not prove compatibility with current authenticated classroom services or official submission records.** See [validation evidence](docs/VALIDATION.md).
+**Version 0.1.1 has partial live acceptance: two single-choice questions, one multiple-choice question and one fill-in-the-blank question were automatically submitted and matched against official stored results. The target of three questions per type is still pending.** See [validation evidence](docs/VALIDATION.md).
 
-Real account identity verification has been observed successfully. Live classroom questions and official submission records remain pending.
+Real login, published-question recovery, original images and the configured vision API have been exercised. Live screenshot fallback, reconnection and grading correctness require further acceptance.
 
 ## Run
 
@@ -37,6 +37,8 @@ Pause blocks unsent submissions while retaining receipts for requests already se
 - Interrupted submissions become `UNKNOWN`. Accepted, rejected or unknown submissions are never automatically resent. Platform acceptance is separate from grading correctness.
 - Grading is explicitly displayed as not retrieved: its platform protocol has not been validated. Check actual scores and correctness in the official page.
 - API keys are encrypted using Electron safeStorage/Windows DPAPI. Platform cookies are isolated from model requests. The model receives image bytes and necessary text, never classroom credentials.
+- Model configuration is restored independently of platform session snapshots. An unreadable login snapshot prompts login verification without hiding saved model settings. Saved API keys are not echoed into the form.
+- Published questions are recovered from the official timeline. Discovery reuses presentation data while pre-submit checks still fetch fresh content. Verified CDN signature rotation does not change question identity; actual version, image-path and transformation changes still invalidate answers.
 - User data remains local; images stay in memory. Logout clears platform storage but retains the submission ledger. Same-user malicious software is outside DPAPI's protection boundary.
 - Remote official pages run in sandboxed WebContentsView instances without Node.js or privileged IPC bridges.
 

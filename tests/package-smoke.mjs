@@ -1,5 +1,5 @@
 import { _electron as electron } from 'playwright';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { listPackage } from '@electron/asar';
@@ -19,7 +19,7 @@ try {
   const runtime = await application.evaluate(({ app }) => ({ packaged: app.isPackaged, appPath: app.getAppPath(), userData: app.getPath('userData'), version: app.getVersion() }));
   assert.equal(runtime.packaged, true);
   assert.equal(runtime.userData, profile);
-  assert.equal(runtime.version, '0.1.0');
+  assert.equal(runtime.version, JSON.parse(readFileSync('package.json','utf8')).version);
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   assert.equal(await page.evaluate(() => typeof window.process), 'undefined');
   const state = await page.evaluate(() => window.rain.command({ type: 'state' }));

@@ -21,6 +21,20 @@ function rig(overrides: Partial<EnginePorts> = {}) {
   const e = new AnswerEngine(ports); e.start('auto'); return { q, records, ports, e };
 }
 describe('protocol and identifiers', () => {
+  it('keeps the question revision stable when a Yuketang image signature rotates',()=>{
+    const raw={problemId:'7',problemType:1,body:'fixture',version:4,options:[{key:'A',value:'a'},{key:'B',value:'b'}]};
+    const a=normalize(raw,{cover:'https://rain-pri-ups.yuketang.cn/fixture.png?auth_key=old'},'1','2','3');
+    const b=normalize(raw,{cover:'https://rain-pri-ups.yuketang.cn/fixture.png?auth_key=new'},'1','2','3');
+    expect(a.revision).toBe(b.revision);expect(a.imageUrls).not.toEqual(b.imageUrls);
+  });
+  it('still detects image transformations, paths and server question-version changes',()=>{
+    const raw={problemId:'7',problemType:1,body:'fixture',version:4,options:[{key:'A',value:'a'},{key:'B',value:'b'}]};
+    const cover='https://rain-pri-ups.yuketang.cn/fixture.png?auth_key=old';
+    const a=normalize(raw,{cover},'1','2','3');
+    expect(normalize({...raw,version:5},{cover},'1','2','3').revision).not.toBe(a.revision);
+    expect(normalize(raw,{cover:cover.replace('fixture.png','changed.png')},'1','2','3').revision).not.toBe(a.revision);
+    expect(normalize(raw,{cover:cover+'&transform=crop'},'1','2','3').revision).not.toBe(a.revision);
+  });
   it('preserves 64-bit IDs without number rounding', () => { const raw = decode('{"id":9876543210123456789,"code":0}'); expect(raw.id).toBe('9876543210123456789'); expect(id(raw.id)).toBe(raw.id); expect(() => id(9876543210123456789)).toThrow(); });
   it.each([['1','single'], ['2','multiple'], ['4','blank']])('uses official classroom type %s = %s', (type, kind) => { const q = normalize({ problemId: '8', problemType: type, body: '<p>题干</p>', options: [{ key: 'A', value: '1' }, { key: 'B', value: '2' }], blanks: [{}, {}], result: null }, { cover: 'https://www.yuketang.cn/image' }, '1','2','3'); expect(q.kind).toBe(kind); expect(q.stem).toBe('题干'); });
   it.each([0,3,5,6,9])('rejects unsupported type %d', type => { expect(() => normalize({ problemType: type }, {}, '1','2','3')).toThrow(); });

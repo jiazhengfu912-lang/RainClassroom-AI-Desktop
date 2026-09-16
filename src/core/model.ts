@@ -12,7 +12,8 @@ export async function solve(config: ModelConfig, q: QuestionContext, signal: Abo
   if (!q.images.length) throw new Error('缺少已核实的题目图片');
   const timeout = AbortSignal.timeout(30000);
   const combined = AbortSignal.any([signal, timeout]);
-  const response = await fetch(`${c.baseUrl}/chat/completions`, {
+  let response: Response, text: string;
+  try { response = await fetch(`${c.baseUrl}/chat/completions`, {
     method: 'POST', redirect: 'error', signal: combined,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.apiKey}` },
     body: JSON.stringify({ model: c.model, messages: [
@@ -20,8 +21,13 @@ export async function solve(config: ModelConfig, q: QuestionContext, signal: Abo
       { role: 'user', content: [ { type: 'text', text: JSON.stringify({ kind: q.kind, stem: q.stem, options: q.options, blankCount: q.blankCount }) }, ...q.images.map(url => ({ type: 'image_url', image_url: { url } })) ] }
     ] })
   });
+    text = await response.text();
+  } catch (error) {
+    if (timeout.aborted && !signal.aborted) throw new Error('模型请求超过 30 秒，本题未提交');
+    if (signal.aborted) throw error;
+    throw new Error('无法连接模型服务，请检查 API 地址和网络');
+  }
   if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? '模型鉴权失败，请检查 API Key' : response.status === 429 ? '模型服务限流，本题未提交' : `模型服务 HTTP ${response.status}`);
-  const text = await response.text();
   if (text.length > 2000000) throw new Error('模型响应过大');
   let data: any;
   try { data = JSON.parse(text); } catch { throw new Error('模型服务未返回 JSON 响应'); }

@@ -22,21 +22,32 @@ else void app.whenReady().then(initialize).catch(() => { dialog.showErrorBox('�
 async function initialize() {
   const dataPath = app.getPath('userData'); mkdirSync(dataPath, { recursive: true });
   const settingsFile = path.join(dataPath, 'settings.json');
+  const startupWarnings: string[] = [];
   let config: ModelConfig = { baseUrl: '', model: '', apiKey: '' }, testedFingerprint = '';
   const fingerprint = () => createHash('sha256').update(JSON.stringify(config)).digest('hex');
-  if (existsSync(settingsFile)) { const saved = JSON.parse(readFileSync(settingsFile, 'utf8')); config = { baseUrl: saved.baseUrl, model: saved.model, apiKey: (await safeStorage.decryptStringAsync(Buffer.from(saved.key, 'base64'))).result }; testedFingerprint = saved.tested ?? ''; }
+  if (existsSync(settingsFile)) {
+    try {
+      const saved = JSON.parse(readFileSync(settingsFile, 'utf8'));
+      config.baseUrl = typeof saved.baseUrl === 'string' ? saved.baseUrl : '';
+      config.model = typeof saved.model === 'string' ? saved.model : '';
+      config.apiKey = (await safeStorage.decryptStringAsync(Buffer.from(saved.key, 'base64'))).result;
+      testedFingerprint = saved.tested ?? '';
+    } catch { startupWarnings.push('已保存的模型密钥暂时无法读取；地址和模型名称已保留，请重启重试或重新输入密钥'); }
+  }
   const persistSettings = async () => { const key = (await safeStorage.encryptStringAsync(config.apiKey)).toString('base64'); writeFileSync(`${settingsFile}.tmp`, JSON.stringify({ baseUrl: config.baseUrl, model: config.model, key, tested: testedFingerprint }), { mode: 0o600 }); renameSync(`${settingsFile}.tmp`, settingsFile); };
   const platformSession = session.fromPartition('persist:rain-platform');
   const sessionFile = path.join(dataPath, 'platform-session.json');
   // Chromium 不跨应用重启保留 session-only cookies；仅在用户核验登录后加密保存，
   // 恢复时保留原过期时间，并由服务端身份核验决定是否仍然有效。
   if (existsSync(sessionFile)) {
+    try {
     const snapshot = JSON.parse((await safeStorage.decryptStringAsync(readFileSync(sessionFile))).result);
     for (const cookie of snapshot) {
       const host = String(cookie.domain).replace(/^\./, '');
       if (host !== new URL(origin).hostname || (cookie.expirationDate && cookie.expirationDate <= Date.now() / 1000)) continue;
       await platformSession.cookies.set({ url: `${new URL(origin).protocol}//${new URL(origin).host}${cookie.path}`, name: cookie.name, value: cookie.value, path: cookie.path, secure: cookie.secure, httpOnly: cookie.httpOnly, sameSite: cookie.sameSite, ...(cookie.hostOnly ? {} : { domain: cookie.domain }), ...(cookie.expirationDate ? { expirationDate: cookie.expirationDate } : {}) });
     }
+    } catch { startupWarnings.push('雨课堂登录会话未能恢复，请重新核验登录；模型配置已独立保留'); }
   }
   const saveSession = async () => {
     const cookies = await platformSession.cookies.get({ url: origin });
@@ -49,6 +60,7 @@ async function initialize() {
   const platform = new Yuketang(platformSession, origin, test ? origin.replace('http:', 'ws:') + '/wsapp/' : undefined);
   const ledger = new Ledger(path.join(dataPath, 'ledger.json'));
   const state: AppState = { identity: null, lessons: [], selected: null, mode: 'stopped', connection: '未连接课堂', question: null, proposal: null, records: ledger.list(), model: { baseUrl: config.baseUrl, model: config.model, hasKey: !!config.apiKey, tested: !!config.apiKey && testedFingerprint === fingerprint() }, notice: '先登录雨课堂，选择正在上课的课堂。' };
+  if (startupWarnings.length) state.notice = startupWarnings.join('；');
   const main = new BrowserWindow({ width: 1320, height: 880, minWidth: 1030, minHeight: 720, title: '雨课堂 AI · 课堂工作台', backgroundColor: '#f3f2ed', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   main.setMenu(null);
   const appUrl = new URL(`file://${path.join(__dirname, 'renderer/index.html').replace(/\\/g, '/')}`).href;
@@ -144,6 +156,7 @@ async function initialize() {
         case 'select': {
           if (engine.isBusy()) throw new Error('请先暂停并等待在途任务结束');
           const lesson = state.lessons.find(l => l.id === command.lessonId); if (!lesson || !state.identity) throw new Error('请刷新并选择有效课堂');
+          if (state.selected?.id === lesson.id && platform.lesson?.id === lesson.id) { await showPlatform(); notice('当前课堂已选中，可以开始答题'); break; }
           engine.stop(); platform.disconnect(); state.mode = 'stopped'; state.selected = null; state.question = null; state.proposal = null; joining = lesson;
           notice('正在打开官方课堂；进入课堂可能同时完成平台签到');
           await showPlatform(`${origin}/lesson/fullscreen/v3/${encodeURIComponent(lesson.id)}?source=5`); break;
@@ -184,7 +197,9 @@ async function initialize() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
-      notice(/[\u4e00-\u9fff]/.test(message) ? message.slice(0, 240) : '操作未完成，请检查网络、登录状态或 API 配置');
+      const operation = ({login:'打开官方页面',refresh:'刷新课堂',select:'进入课堂',start:'启动答题',saveModel:'保存模型配置',testModel:'验证图片识别'} as Record<string,string>)[command.type] ?? '操作';
+      const networkCode = message.match(/ERR_[A-Z_]+/)?.[0];
+      notice(/[\u4e00-\u9fff]/.test(message) ? message.slice(0, 240) : `${operation}失败${networkCode ? `（${networkCode}）` : ''}，请重新打开官方页面或重启 APP；已保存的配置仍保留`);
     } finally { commandBusy = false; emit(); }
     return state;
   });
