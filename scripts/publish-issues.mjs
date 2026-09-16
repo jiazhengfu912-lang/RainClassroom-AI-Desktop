@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-const repository='jiazhengfu912-lang/RainClassroom-AI-Desktop';
+const repository='jiazhengfu912-lang/RainClassroom-Auto-Answer';
 const gh=(...args)=>execFileSync('gh',args,{encoding:'utf8'}).trim();
 const issues=JSON.parse(readFileSync('docs/issues.json','utf8'));
 const existingLabels=JSON.parse(gh('api',`repos/${repository}/labels`));

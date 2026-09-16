@@ -1,6 +1,6 @@
 # Validation / 验证记录
 
-Date: 2026-09-16. Target: Windows 11 x64. Version: 0.1.2.
+Date: 2026-09-16. Target: Windows 11 x64. Version: 0.1.3.
 
 This document separates software checks from real platform acceptance. Test accounts, cookies, model keys, question images and logs are synthetic or local only and are not published.
 
@@ -9,8 +9,8 @@ This document separates software checks from real platform acceptance. Test acco
 | Check | Evidence | Result |
 |---|---|---|
 | TypeScript and production bundles | `npm run build` | PASS |
-| Core and integration tests | `npm test`: 57 tests, 3 files | PASS |
-| Current fullscreen screenshot layout | `npm run test:capture`: matching cover at 150% display scaling; wrong slide, transformed content and clipped cover rejected; expired-link refresh and changed/closed/answered/expired question guards | PASS |
+| Core and integration tests | `npm test`: 60 tests, 3 files | PASS |
+| Current fullscreen screenshot layout | `npm run test:capture`: matching cover with Qiniu signature rotation at 100% display scaling (0.1.3); prior 150% display-scaling check (0.1.2); wrong slide, transformed content and clipped cover rejected; expired-link refresh and changed/closed/answered/expired question guards | PASS |
 | Electron desktop fixture | 16 scenarios, 4 synthetic submissions, 7 model calls | PASS |
 | Dependency audit | `npm audit`: 0 reported vulnerabilities on 2026-09-16 | PASS |
 | Startup recovery | `node tests/startup-recovery.mjs`: saved API fields survive an unreadable login snapshot | PASS |
@@ -25,17 +25,19 @@ Version 0.1.1 regressions reproduced and fixed: unreadable platform-session ciph
 
 Version 0.1.2 reproduces and fixes two additional failures: `rain-pri-ups-ali.yuketang.cn` signature rotation changed the revision, and the current fullscreen page rendered its question in `.page-exercise .slide__wrap > img.cover` rather than the previously supported question nodes. Failed original downloads now refresh the question once, with revision/status checks before retry. Screenshot matching uses the cover URL supplied by that question's presentation response, retaining all non-signature URL components.
 
+Version 0.1.3 fixes `rain-pri-ups-qn.yuketang.cn` rotating `e` / `token` credentials being treated as a question revision. The failure was reproduced through the real adapter-to-engine flow with local fixtures before the fix. Only credentials on this exact observed CDN are excluded; changed image-processing parameters and unknown-host query changes still cancel submission. Old and refreshed live image URLs returned identical image bytes. A production screenshot regression also covers rotated Qiniu cover links. See [Qiniu private download URL documentation](https://developer.qiniu.com/kodo/1656/download-private).
+
 ## Installer
 
 The current-user NSIS installer was built and installed on Windows 11 x64 (OS build 26200); the installer returned exit code 0. No GitHub Release was created.
 
 | Artifact | Value |
 |---|---|
-| Filename | `RainClassroom-AI-0.1.2-Setup.exe` |
-| Size | 112,182,423 bytes |
-| SHA-256 | `B83A49B9F16AFF26D1DDA5253E579CF5D9B9DFC8D09E3663546C6526AD8B1445` |
+| Filename | `RainClassroom-AI-0.1.3-Setup.exe` |
+| Size | 112,182,913 bytes |
+| SHA-256 | `27B308E8BBC2FB292C99DB4625356CF61B61C82630B61C3927CB946B824B27BE` |
 | Authenticode | NotSigned; no signing certificate configured |
-| Installed runtime | PASS: `app.isPackaged === true`, version 0.1.2 |
+| Installed runtime | PASS: `app.isPackaged === true`, version 0.1.3 |
 | Chinese paths | Installer launched from a Chinese project path; isolated Chinese user-data path passed. Installation destination used the default current-user Programs directory. |
 | Window/zoom | PASS: 1030 × 720 window, 125% page zoom, no horizontal overflow in dashboard or model settings; screenshot visually reviewed |
 | Archive contents | PASS: no research, fixture tests, runtime data, session snapshots, settings or ledger files |
@@ -64,7 +66,9 @@ The installed app launched its bundled Electron runtime directly, with no Node.j
 
 At 19:53 China Standard Time, installed version 0.1.2 was restarted, the saved login was verified, and the same classroom was entered again. Three fresh official presentation responses were compared locally with the durable ledger: all 12 accepted submissions matched (multiple-choice compared as a set; blanks compared in order). The earlier four submissions were retained, and eight more were completed with 0.1.2. Two old empty-template tasks remain skipped and are excluded from valid-question counts. Startup remained stopped and did not resend any answers. Raw responses, images, account identifiers, credentials and answers are not published.
 
-The live submission-count target is complete. Overall acceptance remains partial: real multiple-blank ordering and text variations, full download-failure screenshot fallback, long-question segmentation, network interruption and uncertain-receipt recovery, server-side logout invalidation, and a separate clean Windows installation still need their corresponding real-world checks. Automated grading retrieval is not implemented.
+A second classroom was tested later on the same date. Two questions were accepted with 0.1.2; the newly observed Qiniu signatures then caused pending answers to be skipped. After installing 0.1.3, those skipped tasks were recovered and the lesson reached 12 accepted submissions in total (six single-choice including three A/B judgment exercises, three multiple-choice, three single-blank). The teacher view explicitly confirmed the final multiple-choice submission. The user ended testing before the final restart and fresh full-class official-answer comparison; those checks are **NOT_RUN for this second classroom**. This does not replace the earlier 12/12 stored-answer comparison. A reopened/extended skipped question required stopping and restarting the listener to resynchronize.
+
+The first classroom's live submission-count target is complete. Overall acceptance remains partial: real multiple-blank ordering and text variations, full download-failure screenshot fallback, long-question segmentation, network interruption and uncertain-receipt recovery, server-side logout invalidation, and a separate clean Windows installation still need their corresponding real-world checks. Automated grading retrieval is not implemented.
 
 These require a signed-in user, a live classroom activity and a user-configured vision API. They must not be marked passed from HTTP 200 alone, a local status label or fixture tests. Keep AI answer correctness separate from submission acceptance. Unknown submissions must be checked through official records before any further action.
 
@@ -72,6 +76,6 @@ These require a signed-in user, a live classroom activity and a user-configured 
 
 The adapter uses candidate paths `/api/v3/user/basic-info`, `/api/v3/classroom/on-lesson`, `/api/v3/lesson/presentation/fetch`, `/api/v3/lesson/problem/answer` and `/wsapp/`. The official page, not the app, initiates classroom check-in; its response supplies the classroom token and Set-Auth bearer for the selected student classroom. Extra verification is handled in the official page.
 
-`hello.timeline` and `fetchtimeline` contain published `type: problem` entries with `prob`, `pres`, `sid`, `dt` and `limit`. These were observed in the live classroom. The `unlockedproblem` field is optional. `unlockproblem`, `probleminfo`, presentation updates and lesson completion are also implemented. A fresh question-info response and presentation read precede submission. Only the observed `rain-pri-ups.yuketang.cn` and `rain-pri-ups-ali.yuketang.cn` CDNs' `auth_key` query parameter is excluded from the content revision; real content and server version remain checked.
+`hello.timeline` and `fetchtimeline` contain published `type: problem` entries with `prob`, `pres`, `sid`, `dt` and `limit`. These were observed in the live classroom. The `unlockedproblem` field is optional. `unlockproblem`, `probleminfo`, presentation updates and lesson completion are also implemented. A fresh question-info response and presentation read precede submission. Only the observed `rain-pri-ups.yuketang.cn` and `rain-pri-ups-ali.yuketang.cn` CDNs' `auth_key`, and `rain-pri-ups-qn.yuketang.cn`'s `e` / `token`, are excluded from the content revision; real content and server version remain checked.
 
 截图基于准确题目标识或平台本题封面定位，不截图整个桌面。长页面按顺序分段；无法证明完整的嵌套裁剪布局不自动提交。

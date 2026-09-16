@@ -24,6 +24,9 @@ try{
     await load(cover.replace('old','rotated'));
     const shots=await globalThis.capture.screenshotQuestion(wc,q,new AbortController().signal);
     const size=nativeImage.createFromDataURL(shots[0]).getSize();
+    const qiniuCover='https://rain-pri-ups-qn.yuketang.cn/fixture.jpg?e=100&token=old';
+    await load(qiniuCover.replace('e=100&token=old','e=200&token=new'));
+    const qiniuShots=await globalThis.capture.screenshotQuestion(wc,{...q,coverUrl:qiniuCover},new AbortController().signal);
     const rejected=[];
     for(const [label,url,clip]of [['wrong slide',cover.replace('fixture.jpg','other.jpg'),false],['changed transform',cover+'&crop=1',false],['clipped slide',cover,true]]){
       await load(url,clip);
@@ -35,9 +38,10 @@ try{
     for(const [label,change]of [['changed question',{revision:'changed'}],['closed question',{open:false}],['answered question',{answered:true}],['expired question',{deadline:Date.now()}]]){
       try{await globalThis.capture.capture(expired,null,wc.session,'https://www.yuketang.cn',new AbortController().signal,async()=>({...expired,...change,imageUrls:[cover]}));rejected.push([label,false]);}catch{rejected.push([label,true]);}
     }
-    return {shots:shots.length,size,dpr:await wc.executeJavaScript('devicePixelRatio'),rejected,refreshes,recoveredSource:recovered.captureSource};
+    return {shots:shots.length,qiniuShots:qiniuShots.length,size,dpr:await wc.executeJavaScript('devicePixelRatio'),rejected,refreshes,recoveredSource:recovered.captureSource};
   });
   assert.equal(report.shots,1);assert.deepEqual(report.size,{width:768*report.dpr,height:432*report.dpr});
+  assert.equal(report.qiniuShots,1);
   assert.equal(report.refreshes,1);assert.equal(report.recoveredSource,'original');
   assert.ok(report.rejected.every(([,ok])=>ok),JSON.stringify(report));
   console.log(JSON.stringify({passed:true,...report}));

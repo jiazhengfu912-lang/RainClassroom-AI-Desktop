@@ -1,14 +1,50 @@
-# RainClassroom AI Desktop
+# 雨课堂自动答题
 
-[简体中文](README.zh-CN.md) · [Issues](https://github.com/jiazhengfu912-lang/RainClassroom-AI-Desktop/issues)
+[English](README.en.md) · [开发事项](https://github.com/jiazhengfu912-lang/RainClassroom-Auto-Answer/issues)
 
-An experimental Windows 11 x64 app for standard RainClassroom (`www.yuketang.cn`). Sign in through the official website, select one live classroom, capture question images, and use your own vision-model API to preview or automatically submit single-choice, multiple-choice and fill-in-the-blank answers.
+Windows 11 x64 桌面应用：在官方页面登录普通雨课堂，监听单个课堂的新题，取得题图，调用用户配置的视觉模型，预览或自动提交单选、多选、填空答案。
 
-**Version 0.1.2 fixes signed-image and fullscreen capture compatibility. Live testing completed three single-choice, three multiple-choice and three single-blank questions, plus three A/B judgment exercises represented as single choice. All 12 submissions matched freshly retrieved official stored answers.** See [validation evidence and remaining checks](docs/VALIDATION.md).
+> 懒人必备，鼠标也想下班。
 
-Real login, published-question recovery, new-question detection, original images and the configured vision API have been exercised. The screenshot function captured a complete real question in the authenticated page. Live end-to-end download-failure fallback, multiple blanks, network reconnection and grading correctness still require further acceptance.
+截图、填选项、点提交，这些重复动作让程序代劳。你负责登录、选择课堂、配好模型；它负责认真打工，偶尔提醒你：AI 也可能一本正经地算错题。
 
-## Run
+- **手速不够，流程来凑**：监听新题，自动获取题图并调用视觉模型。
+- **选择困难交给模型**：支持单选、多选和填空，先预览或直接自动提交。
+- **摸鱼也要有刹车**：随时暂停、停止；结果未知时不乱点第二次。
+
+**0.1.3 修复了另一种题图签名变化引起的误取消。首轮真实课堂 12 条提交已与官方保存答案逐条核对一致；第二个课堂也完成 12 条被平台接受的提交，但最后的整批官方核对与重启验证因用户结束测试而保留待验收。** 多空填空、真实断网恢复等仍待验收，详细证据见 [验证记录](docs/VALIDATION.md)。
+
+## 使用
+
+1. 安装本地交付的 `RainClassroom-AI-0.1.3-Setup.exe`，打开应用。
+2. 点击「打开官方页面」，在雨课堂官方页面完成本人登录；返回工作台点击「核验登录 / 刷新课堂」。密码、短信验证码直接在官方页面输入。
+3. 在「模型设置」填写 Base URL、API Key 和支持图片的模型名称，保存后点击「验证图片识别」。此测试会调用两次模型，产生 API 用量。Base URL 填 API 根地址，不包含 `/chat/completions`。
+4. 选择正在上课的课堂。APP 打开官方课堂页，复用该页进入课堂的响应连接监听；进入课堂可能同时完成平台签到。需要额外验证时在官方页面处理。
+5. 先选「仅预览答案」检查题图及输出；停止后可选「开始自动提交」。自动模式不会逐题再次询问确认。
+6. 「暂停」立即阻止尚未发出的提交；在途提交仍会记录回执。「停止」停止答题，但保留课堂连接；关闭主窗口退出应用。重启不会自动开始答题。
+
+已登录但课堂列表为空时，先用同一账号在雨课堂官方端扫码签到或进入正在进行的课堂，再返回 APP 刷新。软件不会凭空创建课堂或绕过官方进入验证。
+
+本地安装包尚未配置代码签名证书。安装后可直接运行，无需 Node.js；源码构建与自动化测试才需要开发环境。
+
+教师给已跳过的题目延时或重新开放时，请在 APP 点击「停止」后重新开始，以同步作答状态；已提交或结果未知的记录不会自动重发。
+
+最小化可继续运行；系统睡眠、断网会中断连接，恢复后重新同步题目。不要同时使用另一个程序对同一题自动提交。模型答案未必正确，官方接受提交也不代表答对。
+
+## 图片、结果与数据
+
+- 优先获取平台题图和必要文本；失败时刷新一次本题图片链接，再使用同一登录会话的官方页面截图。截图通过准确题目标识或本题封面链接核对区域；错页、缺图或裁剪不完整时跳过，绝不截取整个桌面。
+- 题型使用当前官方前端确认的编号：1 单选、2 多选、4 填空。填空需要明确空位结构，答案中的逗号不用于拆分空位。
+- 已接受、已拒绝和未知结果均不自动重发。未知结果需要到官方页面核对；软件不把历史记录改成推测的成功。
+- 判题结果与提交回执分别展示。当前适配尚未实测判题协议，因此标记为「尚未获取」，实际得分和对错在官方页面核对。
+- 数据存放在 Electron 的当前用户 `userData` 目录（默认 `%APPDATA%/rainclassroom-ai-desktop`）。API Key 经 Windows DPAPI 支持的 `safeStorage` 加密；平台浏览器会话与模型配置隔离。保护边界不包括同一 Windows 用户下的恶意程序。
+- 题图仅在内存中供当前会话使用；提交状态和答案在本机持久化，以防重发。退出账号清除平台 Cookie、缓存和站点存储，不删除历史提交记录。
+- 模型配置与平台登录会话独立恢复；旧登录快照无法解密时会提示重新核验登录，仍保留模型设置。API Key 不回显，输入框留空表示保留已保存密钥。
+- 模型只接收题图与必要文字，不接收平台 Cookie、课堂 Token 或签名图片 URL。支持 HTTPS 模型服务，以及本机回环 HTTP 服务。
+
+## 从源码运行
+
+需要 Node.js 24.13 或以上的兼容版本、npm、Windows 11 x64。桌面测试使用 Electron 自带 Chromium，不另装浏览器。
 
 ```powershell
 npm ci
@@ -20,29 +56,17 @@ npm start
 npm run package
 ```
 
-Build environment: Node.js 24.13+, npm, Windows 11 x64. The current-user installer is produced in `deliverables/`; it does not require Node.js on the user's machine. Publishing is explicitly disabled during packaging.
+`npm run test:e2e` 仅访问脚本自建的回环模拟服务，使用独立测试数据目录，不访问真实课堂。构建产物在 `dist/`，安装包在 `deliverables/`。打包时固定 `--publish never`，不会创建 GitHub Release。
 
-## Workflow
+安装后基本检查：`node tests/package-smoke.mjs "完整的已安装 EXE 路径"`。此检查使用独立中文用户数据目录，不读取日常使用账号的会话。
 
-Open the official page and sign in there, then return to the dashboard and verify your login. Configure a Chat Completions-compatible API root, API key and vision model; the image capability test makes two billable model calls. Select a live classroom, completing any official entry verification, and choose preview or automatic submission. Entering a classroom can also perform platform attendance.
+## 实现与边界
 
-If the classroom list is empty, use the same account to check in or enter the active classroom through RainClassroom, then refresh the app. The local installer is unsigned. An installed-app smoke check is available with `node tests/package-smoke.mjs "absolute installed executable path"`; it uses an isolated Chinese user-data path.
+- React 工作台只通过有限 IPC 命令操作主进程。官方 `WebContentsView` 开启沙箱与上下文隔离，不暴露本地桥接或 Node.js。
+- 平台适配、模型调用、截图和提交状态机分离；标识符用字符串及无损 JSON 解析，避免大整数精度丢失。
+- 原子写入提交记录后再发送请求；程序中断的在途提交恢复为 `UNKNOWN`。
+- 从官方课堂时间线恢复已发题；题目发现复用已读取课件，提交前仍核验最新内容。已实测 CDN 的临时图片签名轮换不再被误认为题目改动，题目版本、图片路径和内容变换参数仍参与核验。
+- 平台 API 和 DOM 不是稳定公开协议；改版可能需要更新适配。截图支持题目标识节点和已核对封面的 `fullscreen/v3` 幻灯片区域，暂不支持任意页面结构。
+- 第一版只有普通雨课堂、单账号、单课堂、三种指定题型。无云端后端、远程脚本下发、自动更新、成绩正确率承诺。
 
-Pause blocks unsent submissions while retaining receipts for requests already sent. Closing the main window exits; restart never automatically starts answering. Minimized operation is supported. Suspend and network interruption require reconnection and resynchronization.
-
-## Reliability and data
-
-- Platform image first; failed downloads refresh the question image URL once before falling back to an authenticated screenshot. The region must match the question identifier or its verified slide cover. Wrong slides and clipped or incomplete content are rejected.
-- Official classroom type mapping: single=1, multiple=2, blanks=4. Ordered blank answers preserve punctuation.
-- Exact identifiers, validated structured model output, fresh identity/question/deadline checks, write-ahead persistence and duplicate suppression.
-- Interrupted submissions become `UNKNOWN`. Accepted, rejected or unknown submissions are never automatically resent. Platform acceptance is separate from grading correctness.
-- Grading is explicitly displayed as not retrieved: its platform protocol has not been validated. Check actual scores and correctness in the official page.
-- API keys are encrypted using Electron safeStorage/Windows DPAPI. Platform cookies are isolated from model requests. The model receives image bytes and necessary text, never classroom credentials.
-- Model configuration is restored independently of platform session snapshots. An unreadable login snapshot prompts login verification without hiding saved model settings. Saved API keys are not echoed into the form.
-- Published questions are recovered from the official timeline. Discovery reuses presentation data while pre-submit checks still fetch fresh content. Verified CDN signature rotation does not change question identity; actual version, image-path and transformation changes still invalidate answers.
-- User data remains local; images stay in memory. Logout clears platform storage but retains the submission ledger. Same-user malicious software is outside DPAPI's protection boundary.
-- Remote official pages run in sandboxed WebContentsView instances without Node.js or privileged IPC bridges.
-
-The E2E suite uses an isolated local HTTP/WebSocket/model fixture and separate user data. Test endpoint overrides are disabled in packaged builds. Private data, screenshots, installers, research bundles and build artifacts are excluded from Git.
-
-Internal RainClassroom APIs and DOM structures can change. This release targets one account and classroom, with three question types; it does not promise correct model answers. [Sources and third-party notices](THIRD_PARTY_NOTICES.md). No project-level license has been added.
+新工程独立于 Android 签到项目。来源与依赖见 [第三方说明](THIRD_PARTY_NOTICES.md)，公开内容的密钥与隐私检查见 [隐私审查记录](docs/PRIVACY_AUDIT.md)。项目未添加项目级许可证；第三方依赖仍适用各自许可证。

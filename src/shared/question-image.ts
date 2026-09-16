@@ -2,5 +2,6 @@
 export function imageIdentity(value: string): string {
   const url = new URL(value);
   if (['rain-pri-ups.yuketang.cn', 'rain-pri-ups-ali.yuketang.cn'].includes(url.hostname)) url.searchParams.delete('auth_key');
+  if (url.hostname === 'rain-pri-ups-qn.yuketang.cn') { url.searchParams.delete('e'); url.searchParams.delete('token'); }
   return url.href;
 }

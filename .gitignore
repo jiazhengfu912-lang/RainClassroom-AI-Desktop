@@ -10,6 +10,14 @@ coverage/
 *.pem
 *.pfx
 *.p12
+*.key
+*.har
+*.dmp
+*cookies*.json
+*credentials*.json
+*token*.json
+screenshots/
+captures/
 *.sqlite*
 *.db
 *session*.json
