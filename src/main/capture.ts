@@ -1,5 +1,6 @@
 import { nativeImage, net, type WebContents, type Session } from 'electron';
 import type { QuestionContext } from '../shared/types';
+import { imageIdentity } from '../shared/question-image';
 
 export function allowedImage(url: string, origin: string) {
   try { const u = new URL(url); return u.origin === origin || (u.protocol === 'https:' && (u.hostname.endsWith('.yuketang.cn') || u.hostname.endsWith('.xuetangx.com'))); } catch { return false; }
@@ -19,15 +20,23 @@ async function download(url: string, origin: string, session: Session, signal: A
   return image.toDataURL();
 }
 
-// 只定位带准确题目标识的可见节点，绝不退化为整个桌面或整个页面。
-function locate(questionId: string) {
+// 只截取准确题目标识对应的节点，或与平台本题封面一致的完整幻灯片。
+function locate(questionId: string, coverUrl?: string) {
   const visible = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return r.width > 100 && r.height > 50 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none'; };
   const candidates = [...document.querySelectorAll<HTMLElement>('[data-problem-id],[data-question-id],.problem,.problem-box,.ppt-problem,.ppt-dialog, .problem-content')];
-  const element = candidates.find(el => {
+  let element = candidates.find(el => {
     const vue = (el as any).__vue__;
     const value = el.dataset.problemId ?? el.dataset.questionId ?? vue?.$props?.problem?.problemId ?? vue?.$props?.currentData?.problemId ?? vue?.problemId;
     return String(value) === questionId && visible(el);
   });
+  if (!element && coverUrl) {
+    // 当前 fullscreen/v3 用整张封面承载题干与选项，答题按钮覆盖在封面上。
+    const covers = [...document.querySelectorAll<HTMLImageElement>('.page-exercise .slide__wrap > img.cover')];
+    const matches = covers.filter(img => {
+      try { return visible(img) && img.complete && img.naturalWidth >= 100 && imageIdentity(img.currentSrc) === imageIdentity(coverUrl); } catch { return false; }
+    });
+    if (matches.length === 1) element = matches[0];
+  }
   if (!element) return null;
   element.scrollIntoView({ block: 'start' });
   const rect = element.getBoundingClientRect();
@@ -41,6 +50,7 @@ function locate(questionId: string) {
   while (parent && parent !== document.body) {
     const css = getComputedStyle(parent), p = parent.getBoundingClientRect();
     if (/hidden|auto|scroll/.test(css.overflowY) && (rect.bottom > p.bottom + 2 || rect.top < p.top - 2)) return null;
+    if (/hidden|auto|scroll/.test(css.overflowX) && (rect.right > p.right + 2 || rect.left < p.left - 2)) return null;
     parent = parent.parentElement;
   }
   return { x: rect.x + scrollX, y: rect.y + scrollY, width: rect.width, height: rect.height, total: Math.max(rect.height, element.scrollHeight), scrollable: element.scrollHeight > element.clientHeight + 4 };
@@ -48,7 +58,7 @@ function locate(questionId: string) {
 export async function screenshotQuestion(contents: WebContents, q: QuestionContext, signal: AbortSignal): Promise<string[]> {
   signal.throwIfAborted();
   if (contents.isDestroyed()) throw new Error('官方课堂页面已关闭');
-  const bounds = await contents.executeJavaScript(`(${locate.toString()})(${JSON.stringify(q.questionId)})`);
+  const bounds = await contents.executeJavaScript(`(()=>{const imageIdentity=${imageIdentity.toString()};return (${locate.toString()})(${JSON.stringify(q.questionId)},${JSON.stringify(q.coverUrl)});})()`);
   if (!bounds || bounds.total > 18000 || bounds.width > 5000) throw new Error('无法定位完整题目区域，请在官方页面打开本题');
   // 内部滚动容器需用专门适配器；拒绝截到一半的题图。
   if (bounds.scrollable) throw new Error('本题使用内嵌滚动容器，无法确认截图完整，请使用原图或官方手动作答');
@@ -62,15 +72,24 @@ export async function screenshotQuestion(contents: WebContents, q: QuestionConte
   }
   return images;
 }
-export async function capture(q: QuestionContext, contents: WebContents | null, session: Session, origin: string, signal: AbortSignal) {
-  try {
-    if (!q.imageUrls.length || q.imageUrls.length > 6) throw new Error('需要页面截图');
+export async function capture(q: QuestionContext, contents: WebContents | null, session: Session, origin: string, signal: AbortSignal, refresh?: (q: QuestionContext) => Promise<QuestionContext>) {
+  const original = async (question: QuestionContext) => {
+    if (!question.imageUrls.length || question.imageUrls.length > 6) throw new Error('需要页面截图');
     const images: string[] = [];
-    for (const url of q.imageUrls) images.push(await download(url, origin, session, signal));
+    for (const url of question.imageUrls) images.push(await download(url, origin, session, signal));
     signal.throwIfAborted();
-    return { ...q, images, captureSource: 'original' as const };
+    return { ...question, images, captureSource: 'original' as const };
+  };
+  try { return await original(q);
   } catch {
     signal.throwIfAborted();
+    if (refresh) {
+      const fresh = await refresh(q);
+      signal.throwIfAborted();
+      if (fresh.revision !== q.revision || !fresh.open || fresh.answered || (fresh.deadline !== null && fresh.deadline - Date.now() <= 3000)) throw new Error('题目已变化、已作答或已截止');
+      q = fresh;
+      try { return await original(q); } catch { signal.throwIfAborted(); }
+    }
     if (!contents || new URL(contents.getURL()).origin !== origin) throw new Error('题图不可用，请打开已登录的官方课堂页面');
     const images = await screenshotQuestion(contents, q, signal);
     return { ...q, images, captureSource: 'screenshot' as const };

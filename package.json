@@ -1,6 +1,6 @@
 {
   "name": "rainclassroom-ai-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "RainClassroom AI desktop assistant",
   "author": "jiazhengfu912-lang",
@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && node scripts/build.mjs",
     "start": "npm run build && electron .",
     "test": "vitest run",
+    "test:capture": "node tests/capture.mjs",
     "test:e2e": "npm run build && node tests/desktop.mjs",
     "package": "npm run build && electron-builder --win nsis --x64 --publish never"
   },

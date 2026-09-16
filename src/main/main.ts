@@ -69,7 +69,7 @@ async function initialize() {
   let joining: Lesson | null = null;
   const notice = (text: string) => { state.notice = text; emit(); };
   const engine = new AnswerEngine({ ledger,
-    capture: (q, signal) => capture(q, platformView?.webContents ?? null, platformSession, origin, signal),
+    capture: (q, signal) => capture(q, platformView?.webContents ?? null, platformSession, origin, signal, current => platform.fresh(current)),
     solve: (q, signal) => solve(config, q, signal),
     fresh: q => platform.fresh(q), submit: (q, a, signal) => platform.submit(q, a, signal),
     changed(q, a, r) { state.question = q; state.proposal = a; state.notice = r.message; emit(); },

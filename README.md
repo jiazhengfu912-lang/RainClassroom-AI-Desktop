@@ -4,15 +4,16 @@
 
 An experimental Windows 11 x64 app for standard RainClassroom (`www.yuketang.cn`). Sign in through the official website, select one live classroom, capture question images, and use your own vision-model API to preview or automatically submit single-choice, multiple-choice and fill-in-the-blank answers.
 
-**Version 0.1.1 has partial live acceptance: two single-choice questions, one multiple-choice question and one fill-in-the-blank question were automatically submitted and matched against official stored results. The target of three questions per type is still pending.** See [validation evidence](docs/VALIDATION.md).
+**Version 0.1.2 fixes signed-image and fullscreen capture compatibility. Live testing completed three single-choice, three multiple-choice and three single-blank questions, plus three A/B judgment exercises represented as single choice. All 12 submissions matched freshly retrieved official stored answers.** See [validation evidence and remaining checks](docs/VALIDATION.md).
 
-Real login, published-question recovery, original images and the configured vision API have been exercised. Live screenshot fallback, reconnection and grading correctness require further acceptance.
+Real login, published-question recovery, new-question detection, original images and the configured vision API have been exercised. The screenshot function captured a complete real question in the authenticated page. Live end-to-end download-failure fallback, multiple blanks, network reconnection and grading correctness still require further acceptance.
 
 ## Run
 
 ```powershell
 npm ci
 npm test
+npm run test:capture
 npm run build
 npm run test:e2e
 npm start
@@ -31,7 +32,7 @@ Pause blocks unsent submissions while retaining receipts for requests already se
 
 ## Reliability and data
 
-- Platform image first; authenticated, precisely identified question-region screenshot as fallback. Incomplete or unidentified content is skipped.
+- Platform image first; failed downloads refresh the question image URL once before falling back to an authenticated screenshot. The region must match the question identifier or its verified slide cover. Wrong slides and clipped or incomplete content are rejected.
 - Official classroom type mapping: single=1, multiple=2, blanks=4. Ordered blank answers preserve punctuation.
 - Exact identifiers, validated structured model output, fresh identity/question/deadline checks, write-ahead persistence and duplicate suppression.
 - Interrupted submissions become `UNKNOWN`. Accepted, rejected or unknown submissions are never automatically resent. Platform acceptance is separate from grading correctness.

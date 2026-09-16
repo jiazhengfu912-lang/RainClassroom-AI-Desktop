@@ -5,7 +5,7 @@ export interface QuestionContext {
   accountId: string; lessonId: string; questionId: string; presentationId: string;
   kind: QuestionKind; platformType: number; stem: string;
   options: { key: string; text: string }[]; blankCount: number;
-  imageUrls: string[]; images: string[]; captureSource?: 'original' | 'screenshot';
+  imageUrls: string[]; images: string[]; coverUrl?: string; captureSource?: 'original' | 'screenshot';
   revision: string; deadline: number | null; open: boolean; answered: boolean;
 }
 export interface AnswerProposal { kind: QuestionKind; answers: string[]; explanation: string }

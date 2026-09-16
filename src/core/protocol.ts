@@ -1,6 +1,7 @@
 import { parse, isLosslessNumber } from 'lossless-json';
 import { createHash } from 'node:crypto';
 import type { AnswerProposal, QuestionContext, SubmissionReceipt } from '../shared/types';
+import { imageIdentity } from '../shared/question-image';
 
 export class SubmissionNotSentError extends Error {}
 
@@ -30,14 +31,10 @@ export function normalize(raw: any, slide: any, accountId: string, lessonId: str
   const optionImages: string[] = (raw.options ?? []).flatMap((o: any) => Array.from(String(o.value ?? '').matchAll(/<img[^>]+src=["']([^"']+)["']/gi), m => m[1]));
   const imageUrls = [...new Set([slide.cover || slide.coverAlt, ...Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi), m => m[1]), ...optionImages].filter((s): s is string => typeof s === 'string' && /^https?:\/\//.test(s)))];
   const content = { platformType, stem: plain(html), options, blankCount, imageUrls };
-  const revisionImages = imageUrls.map(value => {
-    const url = new URL(value);
-    // 实际课件接口每次读取都会轮换此 CDN 的签名；保留路径及所有内容变换参数。
-    if (url.hostname === 'rain-pri-ups.yuketang.cn') url.searchParams.delete('auth_key');
-    return url.href;
-  });
+  const revisionImages = imageUrls.map(imageIdentity);
+  const coverUrl = imageUrls.includes(slide.cover || slide.coverAlt) ? slide.cover || slide.coverAlt : undefined;
   return { accountId, lessonId, presentationId, questionId: id(raw.problemId), kind, ...content,
-    revision: createHash('sha256').update(JSON.stringify({ ...content, imageUrls: revisionImages, version: String(raw.version ?? '') })).digest('hex'), images: [], deadline: 0, open: false,
+    revision: createHash('sha256').update(JSON.stringify({ ...content, imageUrls: revisionImages, version: String(raw.version ?? '') })).digest('hex'), coverUrl, images: [], deadline: 0, open: false,
     answered: raw.result !== null && raw.result !== undefined };
 }
 export function deadlineFromInfo(info: any, now = Date.now()): number | null {

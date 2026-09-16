@@ -21,10 +21,10 @@ function rig(overrides: Partial<EnginePorts> = {}) {
   const e = new AnswerEngine(ports); e.start('auto'); return { q, records, ports, e };
 }
 describe('protocol and identifiers', () => {
-  it('keeps the question revision stable when a Yuketang image signature rotates',()=>{
+  it.each(['rain-pri-ups.yuketang.cn','rain-pri-ups-ali.yuketang.cn'])('keeps the question revision stable when a %s image signature rotates',host=>{
     const raw={problemId:'7',problemType:1,body:'fixture',version:4,options:[{key:'A',value:'a'},{key:'B',value:'b'}]};
-    const a=normalize(raw,{cover:'https://rain-pri-ups.yuketang.cn/fixture.png?auth_key=old'},'1','2','3');
-    const b=normalize(raw,{cover:'https://rain-pri-ups.yuketang.cn/fixture.png?auth_key=new'},'1','2','3');
+    const a=normalize(raw,{cover:`https://${host}/fixture.png?auth_key=old`},'1','2','3');
+    const b=normalize(raw,{cover:`https://${host}/fixture.png?auth_key=new`},'1','2','3');
     expect(a.revision).toBe(b.revision);expect(a.imageUrls).not.toEqual(b.imageUrls);
   });
   it('still detects image transformations, paths and server question-version changes',()=>{
